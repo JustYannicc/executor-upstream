@@ -529,6 +529,7 @@ export const prepareOpenapiImport = (options: {
         secrets: compiled.secrets,
         oauth: compiled.oauth,
         allowedOrigins: compiled.pinnedOrigins,
+        skipped: [...compiled.skipped, ...compiled.unsupported],
       };
     }),
     options.signal === undefined ? {} : { signal: options.signal },

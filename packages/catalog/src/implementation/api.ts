@@ -102,6 +102,12 @@ export const generateApiApp = (
         }),
       catch: invalid,
     });
+    if (prepared.skipped.length > 0)
+      return yield* new CatalogImportFailed({
+        code: "invalid_source",
+        reason:
+          "Some API operations are unsupported. Add this service with your agent to review the definition and choose which tools to expose.",
+      });
     const [first, ...rest] = prepared.allowedOrigins;
     if (first === undefined) return yield* invalid();
     yield* Effect.forEach(prepared.allowedOrigins, (origin) => destination(origin, host));

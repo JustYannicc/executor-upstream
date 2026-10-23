@@ -97,6 +97,13 @@ layer(HostedLive, { excludeTestServices: true })("API URL imports", (it) => {
           });
           expect(response.status, JSON.stringify(response.body)).toBe(input.status);
         }
+        const partialName = `Partial API ${randomUUID().slice(0, 8)}`;
+        rejected.push(partialName);
+        const partial = yield* api.request(actors.owner, "POST", `${prefix}/apps/import`, {
+          source: { kind: "openapi", name: partialName, url: upstream.partial },
+        });
+        expect(partial.status, JSON.stringify(partial.body)).toBe(422);
+        expect(JSON.stringify(partial.body)).toContain("Some API operations are unsupported");
         const inventory = yield* body(
           Inventory,
           yield* api.request(actors.owner, "GET", `${prefix}/inventory`),

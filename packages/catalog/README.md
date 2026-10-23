@@ -42,6 +42,8 @@ host's egress and prepared with the app framework's own compiler. It selects
 the API origin and derives supported API-key, bearer, Basic and authorization-code
 OAuth methods. `baseUrl` optionally overrides the definition's server. The
 retained app uses the live URL, its pinned origin and authentication bindings.
+Definitions with unsupported operations are refused with a prompt to use agent
+setup, rather than installing an incomplete set of tools.
 
 For `kind: "graphql"`, public endpoints are checked with schema introspection.
 GraphQL does not declare authentication: omit `auth` for a public endpoint, or
