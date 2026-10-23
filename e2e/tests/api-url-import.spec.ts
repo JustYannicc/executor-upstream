@@ -1,6 +1,6 @@
 /** No-code URL imports call the published GitHub emulator through ordinary product accounts. */
 import { expect, layer } from "@effect/vitest";
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Redacted } from "effect";
 import { randomUUID } from "node:crypto";
 import { scenarios } from "../test-plan.ts";
 import { Actors } from "../support/actors.ts";
