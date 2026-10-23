@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { PageSkeleton, DetailSkeleton } from "@executor-js/ui/dashboard/loading";
 import { AsyncResult } from "effect/reactivity";
 import { Alert, AlertDescription } from "@executor-js/ui/components/alert";
@@ -13,6 +14,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Tick02Icon } from "@hugeicons/core-free-icons";
 import {
   billingAtom,
+  billingEnabledAtom,
   checkoutAtom,
   checkoutSettlementWindow,
   planActive,
@@ -165,10 +167,7 @@ function BillingDetails({ returned, onCheckoutSettled }: BillingProps) {
       >
         {(billing) =>
           !billing.enabled ? (
-            <EmptyState title="Billing isn't configured">
-              Your team can keep using Executor. Billing options will appear when this cloud
-              deployment has billing configured.
-            </EmptyState>
+            <BillingDisabled />
           ) : billing.plans.length === 0 ? (
             <EmptyState
               title="Plans unavailable"
@@ -289,9 +288,25 @@ function BillingFailure({ retry }: { readonly retry?: (() => void) | undefined }
     </EmptyState>
   );
 }
+/** A disabled deployment has no billing page, including when opened from an old bookmark. */
+function BillingDisabled() {
+  const { slug } = useOrganizationRoute();
+  const navigate = useNavigate();
+  useEffect(() => {
+    void navigate({
+      to: "/org/$organizationSlug/apps",
+      params: { organizationSlug: slug },
+      replace: true,
+    });
+  }, [navigate, slug]);
+  return null;
+}
+
 /** Members never fetch billing; the backend independently enforces the same rule. */
 export function BillingPage({ returned, onCheckoutSettled }: BillingProps) {
   const organization = useOrganizationRoute();
+  const enabled = useAtomValue(billingEnabledAtom);
+  if (!enabled) return <BillingDisabled />;
   if (organization.role === undefined) return <PageSkeleton title="Billing" />;
   if (organization.role === "member")
     return (

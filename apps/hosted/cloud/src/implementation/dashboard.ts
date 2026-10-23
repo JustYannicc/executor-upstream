@@ -17,6 +17,8 @@ export interface CloudPageHosts {
   readonly formerPasskeyHost: string | null;
   /** Where the deployment serves its documentation, as an absolute URL ending in `/`. */
   readonly documentation: string;
+  /** Whether this deployment offers billing, independent of organization access. */
+  readonly billingEnabled: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export const cloudDocumentContext =
         entry,
         formerPasskeyHost: hosts.formerPasskeyHost,
         documentation: hosts.documentation,
+        billingEnabled: hosts.billingEnabled,
       };
     });
 

@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { billingEnabledAtom } from "../../contracts/billing.ts";
 import { Link } from "@tanstack/react-router";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CreditCardIcon } from "@hugeicons/core-free-icons";
@@ -13,6 +15,8 @@ export function CloudNavigation({
   readonly organizationSlug?: string;
   readonly pendingPage?: string;
 }) {
+  const enabled = useAtomValue(billingEnabledAtom);
+  if (!enabled) return null;
   const content = (
     <>
       <HugeiconsIcon icon={CreditCardIcon} strokeWidth={2} size={16} aria-hidden />

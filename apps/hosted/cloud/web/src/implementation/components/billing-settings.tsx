@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { billingEnabledAtom } from "../../contracts/billing.ts";
 import { Link } from "@tanstack/react-router";
 import { useOrganizationRoute } from "@executor-js/hosted-web/organization";
 import { Button } from "@executor-js/ui/components/button";
@@ -12,6 +14,8 @@ import type { ReactNode } from "react";
 
 /** The billing card keeps its copy and dimensions while organization access loads. */
 export function BillingSettingsPending() {
+  const enabled = useAtomValue(billingEnabledAtom);
+  if (!enabled) return null;
   return (
     <BillingSettingsCard>
       <Button variant="outline" disabled>
@@ -38,6 +42,8 @@ function BillingSettingsCard({ children }: { readonly children: ReactNode }) {
 /** Billing navigation uses the current route and verified organization role. */
 export function BillingSettings() {
   const organization = useOrganizationRoute();
+  const enabled = useAtomValue(billingEnabledAtom);
+  if (!enabled) return null;
   return (
     <BillingSettingsCard>
       <Button

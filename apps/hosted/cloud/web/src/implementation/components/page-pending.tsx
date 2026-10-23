@@ -1,9 +1,13 @@
+import { useAtomValue } from "@effect/atom-react";
+import { billingEnabledAtom } from "../../contracts/billing.ts";
 import { PagePending } from "@executor-js/hosted-web/page-pending";
 import { PageSkeleton } from "@executor-js/ui/dashboard/loading";
 import { useLocation } from "@tanstack/react-router";
 import { BillingSettingsPending } from "./billing-settings.tsx";
 
 export function BillingPagePending() {
+  const enabled = useAtomValue(billingEnabledAtom);
+  if (!enabled) return null;
   return <PageSkeleton title="Billing" />;
 }
 

@@ -71,6 +71,7 @@ export const billingLive = Effect.gen(function* () {
       Layer.succeed(
         Billing,
         Billing.of({
+          enabled: false,
           overview: () =>
             Effect.succeed({
               enabled: false,
@@ -274,6 +275,7 @@ export const billingLive = Effect.gen(function* () {
     Layer.succeed(
       Billing,
       Billing.of({
+        enabled: true,
         overview,
         checkout: (organization, plan, returnUrl) =>
           Effect.gen(function* () {

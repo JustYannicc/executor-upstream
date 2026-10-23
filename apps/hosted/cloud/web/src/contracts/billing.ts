@@ -4,12 +4,18 @@ import { revalidated } from "@executor-js/ui/contracts/refresh";
 import { observeBrowserTransport, observeBrowserResponse } from "@executor-js/telemetry/browser";
 import { organizationHttpClient } from "@executor-js/hosted-web/contracts/organization-reference";
 import { DashboardRuntime } from "@executor-js/hosted-web/contracts/telemetry";
-import { Data, Duration } from "effect";
+import { Data, Duration, Schema } from "effect";
 import { Atom, AtomHttpApi } from "effect/reactivity";
 import { batchReads } from "@executor-js/dashboard-start/batch-browser";
 import type { OrganizationReference } from "@executor-js/hosted-server/organization";
 import { ExecutorCloudApi } from "../../../src/contracts/api.ts";
 import type { BillingOverview } from "../../../src/contracts/billing.ts";
+
+/** Deployment capability supplied with the document, shared by navigation and direct visits. */
+export const billingEnabledAtom = Atom.make(false).pipe(
+  Atom.serializable({ key: "cloud:billing-enabled", schema: Schema.Boolean }),
+  Atom.keepAlive,
+);
 
 const batched = batchReads(ExecutorCloudApi);
 

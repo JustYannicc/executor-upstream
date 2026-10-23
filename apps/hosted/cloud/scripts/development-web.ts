@@ -105,6 +105,10 @@ const main = Effect.scoped(
       {
         resourceOrigins: yield* resourceOriginsAt(origin.origin),
         formerPasskeyHost: null,
+        // Alchemy supplies the capability. A standalone renderer defaults to no billing.
+        billingEnabled: yield* Config.Boolean("CLOUD_BILLING_ENABLED").pipe(
+          Config.withDefault(false),
+        ),
         // The development dashboard proxies documentation to the Worker on its own origin.
         documentation: new URL("/docs/", origin).href,
       },

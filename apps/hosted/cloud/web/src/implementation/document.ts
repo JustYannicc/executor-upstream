@@ -8,6 +8,7 @@ import type { CloudDocumentContext } from "../contracts/document.ts";
 import { entryTeamAtom } from "../contracts/onboarding.ts";
 import { formerPasskeyHostAtom } from "../contracts/auth.ts";
 import { documentationBaseAtom } from "@executor-js/hosted-web/contracts/documentation";
+import { billingEnabledAtom } from "../contracts/billing.ts";
 import { documentPasskeyEnrollmentAtom } from "../contracts/passkey-enrollment.ts";
 
 /** Server only: the context the Worker passed with this document request. */
@@ -23,6 +24,7 @@ export const cloudServerValues = (document: CloudDocumentContext) => {
   const entry = document.entry;
   const shared = [
     ...hostedServerValues(document),
+    Atom.initialValue(billingEnabledAtom, document.billingEnabled),
     Atom.initialValue(formerPasskeyHostAtom, document.formerPasskeyHost),
     Atom.initialValue(documentationBaseAtom, document.documentation),
   ];

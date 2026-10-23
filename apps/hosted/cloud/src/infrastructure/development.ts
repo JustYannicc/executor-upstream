@@ -4,8 +4,9 @@ import * as Docker from "alchemy/Docker";
 import * as Output from "alchemy/Output";
 import { retain } from "alchemy/RemovalPolicy";
 import { cloudSite } from "./site.ts";
-import { Config, Effect, Schema } from "effect";
+import { Config, Effect, Option, Schema } from "effect";
 import { cloudDevelopment } from "../contracts/development.ts";
+import { billingSettings } from "./billing.ts";
 import { cloudDevelopmentDatabaseUrl } from "../contracts/database.ts";
 
 /** Own a persistent local Postgres instance and apply schemas before the Worker connects to it. */
@@ -75,6 +76,7 @@ export const developmentWeb = (apiUrl: Output.Output<string | undefined>) =>
       command: "node scripts/development-web.ts",
       env: {
         NODE_ENV: "development",
+        CLOUD_BILLING_ENABLED: String(Option.isSome(yield* billingSettings.pipe(Effect.orDie))),
         // The Site resource owns marketing output; do not start a second writer.
         SITE_BUILD_HASH: site.hash.output,
         DATABASE_URL: cloudDevelopmentDatabaseUrl(password, configuration.databasePort),

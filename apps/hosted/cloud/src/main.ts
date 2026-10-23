@@ -30,6 +30,7 @@ import {
   removalStallBindings,
 } from "./infrastructure/organization-removal-stalls.ts";
 import { HostedExecutor, lazyHostedApiDocument } from "@executor-js/hosted-server";
+import { Billing } from "./contracts/billing.ts";
 import { BillingMeter } from "./contracts/billing-meter.ts";
 import { billingBindings } from "./infrastructure/billing.ts";
 import { frameworkDocumentation, registryRoutes, gitRoutes } from "@executor-js/app-management";
@@ -345,6 +346,7 @@ export default Api.make(
         : null,
       // Documentation is a site page, served by the edge when the deployment has role hosts.
       documentation: new URL("/docs/", auth.hosts.site).href,
+      billingEnabled: (yield* Billing.pipe(Effect.provide(billing))).enabled,
     });
     const appUi = hostedAppUi(
       appAddresses(auth.origin, yield* cloudAppUiBase.pipe(Effect.orDie)),

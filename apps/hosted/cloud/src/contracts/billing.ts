@@ -68,6 +68,8 @@ export type BillingPlanUnavailable = typeof BillingPlanUnavailable.Type;
 export class Billing extends Context.Service<
   Billing,
   {
+    /** Deployment capability, available without reading a customer or contacting Autumn. */
+    readonly enabled: boolean;
     readonly overview: (
       organization: OrganizationId,
     ) => Effect.Effect<typeof BillingOverview.Type, BillingUnavailable>;

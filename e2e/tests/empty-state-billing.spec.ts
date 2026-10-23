@@ -65,9 +65,14 @@ layer(HostedLive, { excludeTestServices: true })("Billing empty state", (it) => 
             page.getByRole("button", { name: "Refresh plans", exact: true }).click(),
           ]),
         );
-        yield* browser.use("Explain that billing is disabled for this deployment", (page) =>
-          page.getByRole("heading", { name: "Billing isn't configured", exact: true }).waitFor(),
+        yield* browser.use("Leave billing when the provider is disabled", (page) =>
+          page.waitForURL(`**/org/${actors.organization.slug}/apps`),
         );
+        expect(
+          yield* browser.use("Do not keep the billing page mounted", (page) =>
+            page.getByRole("heading", { name: "Billing", exact: true }).count(),
+          ),
+        ).toBe(0);
         expect(
           yield* browser.use("Do not offer a billing portal when disabled", (page) =>
             page.getByRole("button", { name: "Manage billing", exact: true }).count(),
