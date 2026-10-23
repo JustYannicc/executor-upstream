@@ -139,11 +139,13 @@ export class CompanyLookupFailed extends Schema.TaggedError<CompanyLookupFailed>
   "CompanyLookupFailed",
   {},
 ) {}
-/** Null means a personal/disposable address or a domain without a company match. */
+/** Null means no match; undefined means company lookup is not configured. */
 export class CompanyLookup extends Context.Service<
   CompanyLookup,
   {
-    readonly lookup: (domain: string) => Effect.Effect<CompanyProfile | null, CompanyLookupFailed>;
+    readonly lookup: (
+      domain: string,
+    ) => Effect.Effect<CompanyProfile | null | undefined, CompanyLookupFailed>;
   }
 >()("cloud/CompanyLookup") {}
 

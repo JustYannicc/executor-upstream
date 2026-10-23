@@ -30,6 +30,8 @@ export const BillingPlan = Schema.Struct({
 });
 /** Current subscription state, never inferred from a checkout redirect. */
 export const BillingOverview = Schema.Struct({
+  /** Billing can be disabled for deployments that do not configure Autumn. */
+  enabled: Schema.Boolean,
   enterprise: Schema.Boolean,
   plans: Schema.Array(BillingPlan),
   subscriptions: Schema.Array(Schema.Struct({ planId: Schema.String, status: Schema.String })),
@@ -48,6 +50,13 @@ export const BillingUnavailable = ApiError.define({
   message: "Executor could not reach its billing service. Try again.",
 });
 export type BillingUnavailable = typeof BillingUnavailable.Type;
+/** Billing is disabled for this deployment. */
+export const BillingNotConfigured = ApiError.define({
+  tag: "BillingNotConfigured",
+  status: 503,
+  message: "Billing is not configured for this cloud deployment.",
+});
+export type BillingNotConfigured = typeof BillingNotConfigured.Type;
 /** The requested plan is not in the available catalog. */
 export const BillingPlanUnavailable = ApiError.define({
   tag: "BillingPlanUnavailable",
@@ -68,12 +77,12 @@ export class Billing extends Context.Service<
       returnUrl: URL,
     ) => Effect.Effect<
       { readonly url: string | null },
-      BillingUnavailable | BillingPlanUnavailable
+      BillingUnavailable | BillingPlanUnavailable | BillingNotConfigured
     >;
     readonly portal: (
       organization: OrganizationId,
       returnUrl: URL,
-    ) => Effect.Effect<{ readonly url: string }, BillingUnavailable>;
+    ) => Effect.Effect<{ readonly url: string }, BillingUnavailable | BillingNotConfigured>;
     /**
      * Cancel every paid subscription this organization still holds, for use when
      * the organization itself is being removed. Deletion also destroys the
@@ -111,14 +120,19 @@ export const billingGroup = HttpApiGroup.make("billing")
       params: { organization: OrganizationReference },
       payload: Schema.Struct({ plan: Schema.NonEmptyString }),
       success: Schema.Struct({ url: Schema.NullOr(Schema.String) }),
-      error: [BillingUnavailable, BillingPlanUnavailable, OrganizationForbidden],
+      error: [
+        BillingUnavailable,
+        BillingPlanUnavailable,
+        BillingNotConfigured,
+        OrganizationForbidden,
+      ],
     }),
   )
   .add(
     HttpApiEndpoint.post("portal", "/api/organizations/:organization/billing/portal", {
       params: { organization: OrganizationReference },
       success: Schema.Struct({ url: Schema.String }),
-      error: [BillingUnavailable, OrganizationForbidden],
+      error: [BillingUnavailable, BillingNotConfigured, OrganizationForbidden],
     }),
   )
   .middleware(RequireOrganization)

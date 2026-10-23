@@ -73,6 +73,11 @@ const productionSecrets = [
   "POSTHOG_PERSONAL_API_KEY",
   "SENTRY_AUTH_TOKEN",
 ] as const;
+const optionalProductionSecrets = new Set([
+  "AUTUMN_SECRET_KEY",
+  "AXIOM_TOKEN",
+  "CONTEXT_DEV_API_KEY",
+]);
 
 /** A secret from `.env.ci.op`; unset and empty are both absent. */
 const nonEmptySecret = (name: string) =>
@@ -107,6 +112,7 @@ const productionVariables = [
   "SENTRY_TEAM",
   "SENTRY_URL",
 ] as const;
+const optionalProductionVariables = new Set(["AUTUMN_SERVER_URL", "AXIOM_ORG_ID"]);
 
 /**
  * Required status checks on `main`. These are the contexts reported by `ci.yml` calling
@@ -252,29 +258,37 @@ export default Alchemy.Stack(
     );
 
     yield* Effect.forEach(productionSecrets, (secret) =>
-      Config.Redacted(secret).pipe(
-        Effect.flatMap((value) =>
-          GitHub.Secret(`production-${secret}`, {
-            ...target,
-            name: secret,
-            value,
-            environment: production,
-          }).pipe(retain()),
-        ),
-      ),
+      Effect.gen(function* () {
+        const optional = optionalProductionSecrets.has(secret);
+        const value = optional
+          ? Option.getOrElse(yield* nonEmptySecret(secret), () => Redacted.make(""))
+          : yield* Config.Redacted(secret);
+        const resource = GitHub.Secret(`production-${secret}`, {
+          ...target,
+          name: secret,
+          value,
+          environment: production,
+        });
+        if (optional) return yield* resource;
+        return yield* resource.pipe(retain());
+      }),
     );
 
     yield* Effect.forEach(productionVariables, (variable) =>
-      Config.NonEmptyString(variable).pipe(
-        Effect.flatMap((value) =>
-          GitHub.Variable(`production-${variable}`, {
-            ...target,
-            name: variable,
-            value,
-            environment: production,
-          }).pipe(retain()),
-        ),
-      ),
+      Effect.gen(function* () {
+        const optional = optionalProductionVariables.has(variable);
+        const value = optional
+          ? Option.getOrElse(yield* Config.String(variable).pipe(Config.option), () => "")
+          : yield* Config.NonEmptyString(variable);
+        const resource = GitHub.Variable(`production-${variable}`, {
+          ...target,
+          name: variable,
+          value,
+          environment: production,
+        });
+        if (optional) return yield* resource;
+        return yield* resource.pipe(retain());
+      }),
     );
 
     /**

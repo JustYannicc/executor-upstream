@@ -78,3 +78,9 @@ export const companyLookupLive = (
       });
     }),
   );
+
+/** Keep team setup available without caching an unconfigured lookup as a negative match. */
+export const companyLookupDisabled = Layer.succeed(
+  CompanyLookup,
+  CompanyLookup.of({ lookup: () => Effect.succeed(undefined) }),
+);

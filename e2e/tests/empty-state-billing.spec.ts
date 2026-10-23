@@ -21,11 +21,12 @@ layer(HostedLive, { excludeTestServices: true })("Billing empty state", (it) => 
           page.goto(`/org/${actors.organization.slug}/apps`),
         );
         let reads = 0;
+        let billingEnabled = true;
         yield* browser.use("Provide an empty billing catalog at the HTTP boundary", (page) =>
           page.route("**/api/organizations/*/billing", (route) => {
             reads++;
             return route.fulfill({
-              json: { enterprise: false, usage: null, plans: [], subscriptions: [] },
+              json: { enabled: billingEnabled, enterprise: false, plans: [], subscriptions: [] },
             });
           }),
         );
@@ -55,6 +56,23 @@ layer(HostedLive, { excludeTestServices: true })("Billing empty state", (it) => 
           ]),
         );
         yield* Effect.sync(() => expect(reads).toBeGreaterThan(before));
+        billingEnabled = false;
+        yield* browser.use("Refresh billing after the provider is disabled", (page) =>
+          Promise.all([
+            page.waitForResponse((response) =>
+              new URL(response.url()).pathname.endsWith("/billing"),
+            ),
+            page.getByRole("button", { name: "Refresh plans", exact: true }).click(),
+          ]),
+        );
+        yield* browser.use("Explain that billing is disabled for this deployment", (page) =>
+          page.getByRole("heading", { name: "Billing isn't configured", exact: true }).waitFor(),
+        );
+        expect(
+          yield* browser.use("Do not offer a billing portal when disabled", (page) =>
+            page.getByRole("button", { name: "Manage billing", exact: true }).count(),
+          ),
+        ).toBe(0);
       }),
     ),
   );

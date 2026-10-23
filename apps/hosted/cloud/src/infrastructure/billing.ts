@@ -75,13 +75,28 @@ export const assertKeyEnvironment = (
 const instanceKey = (value: Redacted.Redacted<string>) =>
   Redacted.make(`am_sk_test_${Redacted.value(value)}`);
 
-/** An unset or blank setting means Autumn itself, so an empty deployment variable is not a URL. */
-const configuredServerUrl = Config.NonEmptyString("AUTUMN_SERVER_URL").pipe(
-  Config.option,
-  Effect.flatMap((value) =>
-    decodeServerUrl(Redacted.make(Option.getOrElse(value, () => autumnServer))),
-  ),
-);
+/** No key and no explicit endpoint disables billing; an endpoint without a key is invalid. */
+const autumnCredentials = Effect.gen(function* () {
+  const key = yield* Config.Redacted("AUTUMN_SECRET_KEY").pipe(
+    Config.option,
+    Effect.map(Option.filter((value) => Redacted.value(value) !== "")),
+  );
+  const endpoint = yield* Config.String("AUTUMN_SERVER_URL").pipe(
+    Config.option,
+    Effect.map(Option.filter((value) => value !== "")),
+  );
+  if (Option.isNone(key)) {
+    if (Option.isSome(endpoint))
+      return yield* Effect.die(new Error("AUTUMN_SERVER_URL requires AUTUMN_SECRET_KEY"));
+    return Option.none();
+  }
+  const serverUrl = yield* decodeServerUrl(
+    Redacted.make(Option.getOrElse(endpoint, () => autumnServer)),
+  );
+  yield* keyEnvironment(key.value);
+  yield* assertCredentialEndpoint(key.value, Redacted.value(serverUrl));
+  return Option.some({ serverUrl, secretKey: key.value });
+});
 
 /** Each test stage addresses its own private instance path; nothing needs provisioning first. */
 const instanceUrl = (host: string, slug: string, instance: Redacted.Redacted<string>) =>
@@ -103,11 +118,11 @@ const billingEndpoint = Effect.gen(function* () {
   const emulators = yield* cloudEmulators;
   if (Option.isSome(emulators)) {
     const { billing } = Redacted.value(emulators.value);
-    return {
+    return Option.some({
       catalog,
       serverUrl: Effect.succeed(yield* decodeServerUrl(Redacted.make(billing.baseUrl))),
       secretKey: Effect.succeed(Redacted.make(billing.token)),
-    } satisfies BillingSettings;
+    } satisfies BillingSettings);
   }
   const stage = yield* testStage;
   if (Option.isSome(stage)) {
@@ -116,34 +131,34 @@ const billingEndpoint = Effect.gen(function* () {
     // Test-stage settings resolve at runtime, so the URL is assembled inside the accessor.
     const instance = yield* Random("BillingInstance", { bytes: 12 });
     const secret = yield* Random("BillingSecret");
-    return {
+    return Option.some({
       catalog,
       serverUrl: (yield* instance.text).pipe(
         Effect.flatMap((value) => decodeServerUrl(instanceUrl(host, slug, value))),
       ),
       secretKey: (yield* secret.text).pipe(Effect.map(instanceKey)),
-    } satisfies BillingSettings;
+    } satisfies BillingSettings);
   }
-  const serverUrl = yield* configuredServerUrl;
-  const secretKey = yield* Config.Redacted("AUTUMN_SECRET_KEY");
-  yield* keyEnvironment(secretKey);
-  yield* assertCredentialEndpoint(secretKey, Redacted.value(serverUrl));
-  return {
+  const configured = yield* autumnCredentials;
+  if (Option.isNone(configured)) return Option.none();
+  return Option.some({
     catalog,
-    serverUrl: Effect.succeed(serverUrl),
-    secretKey: Effect.succeed(secretKey),
-  } satisfies BillingSettings;
+    serverUrl: Effect.succeed(configured.value.serverUrl),
+    secretKey: Effect.succeed(configured.value.secretKey),
+  } satisfies BillingSettings);
 });
 
 /** The catalog is only ever read together with the key that will serve it. */
 export const billingSettings = billingEndpoint.pipe(
-  Effect.map((settings): BillingSettings => ({
-    ...settings,
-    catalog: Effect.all([settings.catalog, settings.secretKey]).pipe(
-      Effect.tap(([catalog, key]) => assertKeyEnvironment(key, catalog.environment)),
-      Effect.map(([catalog]) => catalog),
-    ),
-  })),
+  Effect.map(
+    Option.map((settings): BillingSettings => ({
+      ...settings,
+      catalog: Effect.all([settings.catalog, settings.secretKey]).pipe(
+        Effect.tap(([catalog, key]) => assertKeyEnvironment(key, catalog.environment)),
+        Effect.map(([catalog]) => catalog),
+      ),
+    })),
+  ),
 );
 
 /**
@@ -191,13 +206,13 @@ export const billingBindings = Effect.gen(function* () {
       secret.text.pipe(Output.map(instanceKey)),
     );
   }
-  const serverUrl = yield* configuredServerUrl;
-  const secretKey = yield* Config.Redacted("AUTUMN_SECRET_KEY");
+  const configured = yield* autumnCredentials;
+  if (Option.isNone(configured)) return {};
+  const { serverUrl, secretKey } = configured.value;
   const environment = yield* keyEnvironment(secretKey);
   // Production bills real customers. Stop before anything is written rather than bind a sandbox.
   if (stage === productionStage && environment !== "live")
     return yield* Effect.die(`The ${productionStage} stage requires a live Autumn key`);
-  yield* assertCredentialEndpoint(secretKey, Redacted.value(serverUrl));
   if (Redacted.value(serverUrl) !== autumnServer)
     return provision(Output.asOutput(serverUrl), Output.asOutput(secretKey));
   const catalog = yield* Output.stackRef<BillingCatalog>("executor-next-billing", {

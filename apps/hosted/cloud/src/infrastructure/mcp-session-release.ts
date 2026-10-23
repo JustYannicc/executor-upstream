@@ -23,6 +23,11 @@ import {
   releaseRefusalReport,
 } from "../contracts/release-guard.ts";
 import { telemetryDatasets } from "./telemetry.ts";
+import {
+  axiomSessionQuerySettings,
+  axiomSettings,
+  type AxiomSessionQuerySettings,
+} from "./axiom-settings.ts";
 
 const Bindings = Schema.Array(
   Schema.Struct({
@@ -161,10 +166,8 @@ const sessionEvidence = (body: unknown) =>
  * `initialize` and `tools/call` spans that did not fail. Only session objects run the protocol
  * servers, so with no `McpSessions` invocations every one of them was served by `McpSession`.
  */
-const sessionTraffic = (since: DateTime.Utc) =>
+const sessionTraffic = (since: DateTime.Utc, settings: AxiomSessionQuerySettings) =>
   Effect.gen(function* () {
-    const token = yield* Config.Redacted("AXIOM_TOKEN");
-    const org = yield* Config.NonEmptyString("AXIOM_ORG_ID");
     const { names } = yield* telemetryDatasets;
     const stage = yield* Stage;
     const apl = [
@@ -182,8 +185,8 @@ const sessionTraffic = (since: DateTime.Utc) =>
     const http = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
     const response = yield* http.execute(
       HttpClientRequest.post("https://api.axiom.co/v1/datasets/_apl?format=tabular").pipe(
-        HttpClientRequest.bearerToken(token),
-        HttpClientRequest.setHeader("X-Axiom-Org-Id", org),
+        HttpClientRequest.bearerToken(settings.token),
+        HttpClientRequest.setHeader("X-Axiom-Org-Id", settings.organizationId),
         HttpClientRequest.bodyJsonUnsafe({ apl }),
       ),
     );
@@ -234,9 +237,21 @@ export const mcpSessionRetirementGate = Effect.gen(function* () {
   const since = DateTime.addDuration(gateway.createdAt, propagation);
   if (DateTime.isLessThan(yield* DateTime.now, since))
     return yield* blocked(
-      `the API version that forwards to McpSession went live at ${DateTime.formatIso(gateway.createdAt)}; wait until ${DateTime.formatIso(since)}.`,
+      "the API version that forwards to McpSession went live at " +
+        DateTime.formatIso(gateway.createdAt) +
+        "; wait until " +
+        DateTime.formatIso(since) +
+        ".",
     );
-  const traffic = yield* sessionTraffic(since).pipe(
+  const axiom = yield* axiomSettings.pipe(Effect.orDie);
+  if (Option.isNone(axiom))
+    return yield* blocked("Axiom is not configured, so MCP session traffic cannot be verified.");
+  const querySettings = axiomSessionQuerySettings(axiom.value);
+  if (Option.isNone(querySettings))
+    return yield* blocked(
+      "Axiom organization id is not configured, so MCP session traffic cannot be verified.",
+    );
+  const traffic = yield* sessionTraffic(since, querySettings.value).pipe(
     Effect.catchTag("IncompleteSessionEvidence", ({ reason }) =>
       Effect.fail(
         new McpSessionReleaseBlocked({

@@ -11,7 +11,7 @@ import { cloudEmulators } from "./emulators.ts";
 import type { EmulatedServices } from "../contracts/emulators.ts";
 import { FetchHttpClient } from "effect/http";
 import { Onboarding, OnboardingUnavailable, TeamIconNotFound } from "../contracts/onboarding.ts";
-import { companyLookupLive } from "../implementation/company-profile.ts";
+import { companyLookupDisabled, companyLookupLive } from "../implementation/company-profile.ts";
 import { makeOnboarding } from "../implementation/onboarding.ts";
 import {
   v1MembershipDisabled,
@@ -36,7 +36,7 @@ import {
   v1ImportWriterName,
   v1LiveSettings,
 } from "./v1-import-settings.ts";
-import { autumnServer, billingSettings } from "./billing.ts";
+import { autumnServer, billingSettings, type BillingSettings } from "./billing.ts";
 import { cloudDatabaseConnection, v1DatabaseConnection } from "./database.ts";
 import {
   CheckSince,
@@ -46,6 +46,12 @@ import {
 } from "./v1-membership-settings.ts";
 
 const configured = (value: string) => value !== "";
+
+const requireAutumn = (settings: Option.Option<BillingSettings>, reason: string) =>
+  Effect.gen(function* () {
+    if (Option.isNone(settings)) return yield* Effect.die(new Error(reason));
+    return settings.value;
+  });
 
 /**
  * v1's Postgres, as an accessor for the connection string. Production reads it through its
@@ -121,14 +127,21 @@ const cloudV1Membership = (
       ),
     );
     // v1 billed each WorkOS organization in the same Autumn account v2 bills from.
-    const billing = yield* billingSettings;
+    const configuredBilling = yield* billingSettings;
     return Option.some(
       Effect.gen(function* () {
         return {
           ...key.value,
           since: cutoff,
           database: yield* database.value,
-          billing: { serverUrl: yield* billing.serverUrl, secretKey: yield* billing.secretKey },
+          ...(Option.isSome(configuredBilling)
+            ? {
+                billing: {
+                  serverUrl: yield* configuredBilling.value.serverUrl,
+                  secretKey: yield* configuredBilling.value.secretKey,
+                },
+              }
+            : {}),
         } satisfies V1MembershipSettings;
       }),
     );
@@ -144,7 +157,16 @@ export const cloudOnboarding = Effect.gen(function* () {
         Redacted.make(Redacted.value(emulators.value).company.token),
         `${Redacted.value(emulators.value).company.baseUrl}/v1/brand/retrieve`,
       )
-    : companyLookupLive(yield* Config.Redacted("CONTEXT_DEV_API_KEY"));
+    : Option.match(
+        yield* Config.Redacted("CONTEXT_DEV_API_KEY").pipe(
+          Config.option,
+          Effect.map(Option.filter((value) => Redacted.value(value) !== "")),
+        ),
+        {
+          onSome: (key) => companyLookupLive(key),
+          onNone: () => companyLookupDisabled,
+        },
+      );
   const v1Settings = yield* cloudV1Membership(emulators);
   const connection = yield* cloudDatabaseConnection;
   const service = yield* makeExecutionMemo(
@@ -211,7 +233,10 @@ const cloudV1EmulatedSource = (
     if (Option.isNone(emulators) || Option.isNone(database))
       return Option.none<Effect.Effect<V1SourceSettings>>();
     const workos = Redacted.value(emulators.value).workos;
-    const billing = yield* billingSettings;
+    const billing = yield* requireAutumn(
+      yield* billingSettings,
+      "The configured v1 import requires Autumn billing.",
+    );
     const connection = database.value;
     return Option.some<Effect.Effect<V1SourceSettings>>(
       Effect.gen(function* () {
@@ -235,7 +260,10 @@ const cloudV1ProductionSource = Effect.gen(function* () {
   const database = yield* cloudV1Database(true, false);
   if (Option.isNone(database)) return yield* Effect.die(new Error(missingV1PlanetscaleDatabase));
   const connection = database.value;
-  const billing = yield* billingSettings;
+  const billing = yield* requireAutumn(
+    yield* billingSettings,
+    "The configured v1 import requires Autumn billing.",
+  );
   const blobs = yield* v1R2Blobs;
   return Option.some<Effect.Effect<V1SourceSettings>>(
     Effect.gen(function* () {

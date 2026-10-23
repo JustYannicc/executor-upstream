@@ -14,6 +14,7 @@ import { Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { testStage } from "./stage.ts";
 import { InvocationTelemetry } from "./invocation-telemetry.ts";
 import { sqlTracing } from "../implementation/sql-tracing.ts";
+import { axiomSettings } from "./axiom-settings.ts";
 
 const binding = "EXECUTOR_TELEMETRY";
 
@@ -36,6 +37,8 @@ export const telemetryDatasets = Effect.gen(function* () {
 });
 
 export const telemetryResources = Effect.gen(function* () {
+  const axiom = yield* axiomSettings.pipe(Effect.orDie);
+  if (Option.isNone(axiom)) return Option.none();
   const stage = yield* Stage;
   const { shared, names } = yield* telemetryDatasets;
   // Axiom marks ownership per stage; every test stage takes the shared datasets over on deploy.
@@ -106,7 +109,7 @@ export const telemetryResources = Effect.gen(function* () {
       [names.metrics]: { ingest: ["create"] },
     },
   });
-  return { names, traces, logs, metrics, ingest };
+  return Option.some({ names, traces, logs, metrics, ingest });
 });
 
 /**
@@ -117,7 +120,9 @@ export const telemetryResources = Effect.gen(function* () {
 export const cloudObservability = Effect.gen(function* () {
   if ((yield* AlchemyContext).dev) return {};
   const stage = yield* Stage;
-  const { names, traces, ingest } = yield* telemetryResources;
+  const resources = yield* telemetryResources;
+  if (Option.isNone(resources)) return {};
+  const { names, traces, ingest } = resources.value;
   const destination = yield* Cloudflare.Workers.ObservabilityDestination("PlatformTraces", {
     name: `executor-next-${stage}-platform-traces`,
     url: traces.otelTracesEndpoint,
@@ -150,7 +155,9 @@ export const telemetryBindings = Effect.gen(function* () {
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(TelemetryConfig))(config);
     return { [binding]: Output.asOutput(Redacted.make(encoded)) };
   }
-  const { names, traces, logs, metrics, ingest } = yield* telemetryResources;
+  const resources = yield* telemetryResources;
+  if (Option.isNone(resources)) return { [binding]: Output.asOutput(Redacted.make("null")) };
+  const { names, traces, logs, metrics, ingest } = resources.value;
   const version = yield* Config.NonEmptyString("EXECUTOR_BUILD_VERSION");
   const environment = yield* Stage;
   return {
@@ -197,6 +204,7 @@ export const cloudTelemetry = Layer.unwrap(
     const bound = yield* context.get<unknown>(binding);
     // Alchemy env props may arrive JSON-decoded; RuntimeContext.set uses a redacted marker.
     const value = Redacted.isRedacted(bound) ? Redacted.value(bound) : bound;
+    if (value === undefined || value === null || value === "null") return Layer.empty;
     const config = yield* Schema.decodeUnknownEffect(
       Schema.Union([Schema.fromJsonString(TelemetryConfig), TelemetryConfig]),
     )(value).pipe(Effect.catch(() => Effect.die(new Error("Invalid telemetry configuration"))));

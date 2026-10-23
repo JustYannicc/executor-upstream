@@ -28,7 +28,7 @@ function BillingSettingsCard({ children }: { readonly children: ReactNode }) {
         <CardTitle>
           <h2>Billing</h2>
         </CardTitle>
-        <CardDescription>Manage your plan and payment details.</CardDescription>
+        <CardDescription>View the billing page for this organization.</CardDescription>
       </CardHeader>
       <CardFooter className="px-4 pb-4">{children}</CardFooter>
     </Card>

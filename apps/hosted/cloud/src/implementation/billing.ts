@@ -7,7 +7,7 @@ import {
   type OrganizationId,
 } from "@executor-js/hosted-server";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { Cause, Effect, Layer, Schema } from "effect";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpServerRequest } from "effect/http";
 import { AutumnClient, type AutumnRequestFailed } from "../contracts/autumn.ts";
 import { autumnLive, autumnReads } from "./autumn-client.ts";
@@ -21,6 +21,7 @@ import { reportCloudFailure } from "./error-reporting.ts";
 import { HttpApiBuilder } from "effect/http-api";
 import {
   Billing,
+  BillingNotConfigured,
   BillingOverview,
   BillingPlanUnavailable,
   BillingUnavailable,
@@ -56,7 +57,35 @@ const active = (customer: Subscriptions, plans: ReadonlyArray<string>) =>
 /** Resolve the selected Autumn environment once; each invocation owns its client. */
 export const billingLive = Effect.gen(function* () {
   // Resolve during initialization so Alchemy binds every value into the Worker environment.
-  const settings = yield* billingSettings.pipe(Effect.orDie);
+  const configured = yield* billingSettings.pipe(Effect.orDie);
+  if (Option.isNone(configured))
+    return Layer.mergeAll(
+      Layer.succeed(
+        BillingMeter,
+        BillingMeter.of({
+          memberLimit: () => Effect.succeed(Number.POSITIVE_INFINITY),
+          syncSeats: () => Effect.void,
+          reconcileSeats: Effect.void,
+        }),
+      ),
+      Layer.succeed(
+        Billing,
+        Billing.of({
+          overview: () =>
+            Effect.succeed({
+              enabled: false,
+              enterprise: false,
+              plans: [],
+              subscriptions: [],
+            }),
+          checkout: () => Effect.fail(new BillingNotConfigured()),
+          portal: () => Effect.fail(new BillingNotConfigured()),
+          cancel: (organization) =>
+            Effect.succeed({ customerId: organizationOwner(organization), cancelled: [] }),
+        }),
+      ),
+    );
+  const settings = configured.value;
   // Test-stage settings resolve at runtime, so build the client inside the invocation, not here.
   const members = yield* billingMembers;
   const client = yield* makeExecutionMemo(
@@ -87,6 +116,7 @@ export const billingLive = Effect.gen(function* () {
       // The billing provider lists plans in its own order; the page shows the smallest first.
       const offered = [catalog.free, catalog.team, catalog.enterprise];
       return yield* Schema.decodeUnknownEffect(BillingOverview)({
+        enabled: true,
         enterprise: active(customer, [catalog.enterprise]),
         plans: plans.list
           .filter((plan) => !plan.archived && offered.includes(plan.id))

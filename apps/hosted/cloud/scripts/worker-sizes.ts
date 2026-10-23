@@ -90,9 +90,10 @@ const {
 
 /**
  * Worker props read deploy configuration, but each value becomes a binding, not uploaded
- * JavaScript. These stand-ins only satisfy each setting's validation; this job holds no secrets
- * and never contacts Cloudflare or Sentry. They are read through Effect's configuration, not
- * set in the environment, so the site build sees only what the deploy passes it.
+ * JavaScript. These stand-ins satisfy required settings; this job holds no secrets and never
+ * contacts Cloudflare or Sentry. Optional vendors stay unset to exercise the no-vendor build
+ * path. Values are read through Effect's configuration, not set in the environment, so the site
+ * build sees only what the deploy passes it.
  */
 const deployConfiguration = {
   NODE_ENV: "production",
@@ -105,10 +106,6 @@ const deployConfiguration = {
   EXECUTOR_BUILD_VERSION: "0".repeat(40),
   EXECUTOR_APP_UI_BASE_URL: "https://executor.app",
   CLOUD_PLACEMENT_REGION: "aws:us-east-1",
-  AUTUMN_SECRET_KEY: "am_sk_live_unused",
-  AUTUMN_SERVER_URL: "https://api.useautumn.com",
-  AXIOM_TOKEN: "unused",
-  AXIOM_ORG_ID: "unused",
   PLANETSCALE_ORGANIZATION: "unused",
   PLANETSCALE_DATABASE_NAME: "unused",
   PLANETSCALE_CLUSTER_SIZE: "unused",
@@ -121,7 +118,6 @@ const deployConfiguration = {
   GOOGLE_CLIENT_SECRET: "unused",
   OAUTH_PROXY_SECRET: "0".repeat(32),
   OAUTH_PROXY_PRODUCTION_URL: "https://executor.sh",
-  CONTEXT_DEV_API_KEY: "unused",
   POSTHOG_PERSONAL_API_KEY: "unused",
   SENTRY_AUTH_TOKEN: "unused",
   AUTH_EMAIL_DOMAIN: "executor.sh",
@@ -148,7 +144,7 @@ const production: Target = {
     EXECUTOR_OAUTH_GITHUB_CLIENT_ID: "unused",
     EXECUTOR_OAUTH_GITHUB_CLIENT_SECRET: "unused",
     // Evaluate the v1 import's production path too: it binds v1's blob bucket.
-    CLOUD_V1_IMPORT: "on",
+    CLOUD_V1_IMPORT: "off",
     V1_IMPORT_OPERATOR_TOKEN: "unused-unused-unused-unused-unused",
     // The import requires v1's ID for every first-party client production offers.
     V1_FIRST_PARTY_CLIENT_IDS: JSON.stringify({ github: "unused" }),

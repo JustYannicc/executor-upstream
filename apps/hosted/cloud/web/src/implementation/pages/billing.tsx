@@ -76,14 +76,15 @@ function BillingDetails({ returned, onCheckoutSettled }: BillingProps) {
   const checkoutState = useAtomValue(checkoutAtom);
   const portalState = useAtomValue(portalAtom);
   const [error, setError] = useState<string | null>(null);
+  const overview = Option.getOrUndefined(data);
   const busy = checkoutState.waiting || portalState.waiting || !AsyncResult.isSuccess(result);
   const confirmed =
-    awaitingPlan !== undefined && Option.isSome(data) && planActive(data.value, awaitingPlan);
-  const waitingForPlan = awaitingPlan !== undefined && Option.isSome(data) && !confirmed;
+    awaitingPlan !== undefined && overview?.enabled === true && planActive(overview, awaitingPlan);
+  const waitingForPlan = awaitingPlan !== undefined && overview?.enabled === true && !confirmed;
   const unconfirmed =
     unconfirmedPlan !== undefined &&
-    Option.isSome(data) &&
-    !planActive(data.value, unconfirmedPlan);
+    overview?.enabled === true &&
+    !planActive(overview, unconfirmedPlan);
   useEffect(() => {
     if (confirmed) onCheckoutSettled();
   }, [confirmed, onCheckoutSettled]);
@@ -101,20 +102,22 @@ function BillingDetails({ returned, onCheckoutSettled }: BillingProps) {
         <h1 className="text-[22px] font-semibold tracking-[-0.035em] leading-[1.35] [&>span]:text-muted-foreground [&>span]:text-[13px] [&>span]:font-mono [&>span]:font-normal [&>span]:ml-[8px] [&>span]:align-middle">
           Billing
         </h1>
-        <Button
-          data-product-area="billing"
-          data-product-action="open_portal"
-          variant="outline"
-          disabled={busy}
-          onClick={async () => {
-            setError(null);
-            const result = await portal({ params: { organization: organization.organization } });
-            if (Exit.isFailure(result) || !openBillingUrl(result.value.url))
-              setError("Unable to open billing settings. Try again.");
-          }}
-        >
-          Manage billing
-        </Button>
+        {overview?.enabled !== false && (
+          <Button
+            data-product-area="billing"
+            data-product-action="open_portal"
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              setError(null);
+              const result = await portal({ params: { organization: organization.organization } });
+              if (Exit.isFailure(result) || !openBillingUrl(result.value.url))
+                setError("Unable to open billing settings. Try again.");
+            }}
+          >
+            Manage billing
+          </Button>
+        )}
       </div>
       {returned.organization && returned.organization !== organization.id && (
         <Alert className="notice border border-border rounded-[8px] py-[12px] px-[16px] my-[20px] mx-0 text-[13px]">
@@ -161,7 +164,12 @@ function BillingDetails({ returned, onCheckoutSettled }: BillingProps) {
         pending={<DetailSkeleton label="Loading plans" />}
       >
         {(billing) =>
-          billing.plans.length === 0 ? (
+          !billing.enabled ? (
+            <EmptyState title="Billing isn't configured">
+              Your team can keep using Executor. Billing options will appear when this cloud
+              deployment has billing configured.
+            </EmptyState>
+          ) : billing.plans.length === 0 ? (
             <EmptyState
               title="Plans unavailable"
               action={

@@ -5,7 +5,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { retain } from "alchemy/RemovalPolicy";
 import { Stage } from "alchemy/Stage";
-import { Config, Effect, Layer } from "effect";
+import { Config, Effect, Layer, Option, Redacted } from "effect";
 import { productionSocialCallbackOrigin } from "./src/infrastructure/deploy-settings.ts";
 
 export default Alchemy.Stack(
@@ -49,12 +49,15 @@ export default Alchemy.Stack(
       "EXECUTOR_APP_DOMAIN_ZONE",
       "CLOUD_PLACEMENT_REGION",
       "AUTH_EMAIL_DOMAIN",
-    ] as const)
-      yield* GitHub.Variable(name, {
-        ...target,
-        name,
-        value: yield* Config.NonEmptyString(name),
-      }).pipe(retain());
+    ] as const) {
+      const optional = name === "AXIOM_ORG_ID";
+      const value = optional
+        ? Option.getOrElse(yield* Config.String(name).pipe(Config.option), () => "")
+        : yield* Config.NonEmptyString(name);
+      const variable = GitHub.Variable(name, { ...target, name, value });
+      if (optional) yield* variable;
+      else yield* variable.pipe(retain());
+    }
     // Test stages sign in through production's proxy, at the edge where its social sign-ins return.
     yield* GitHub.Variable("OAUTH_PROXY_PRODUCTION_URL", {
       ...target,
@@ -66,15 +69,22 @@ export default Alchemy.Stack(
       "CLOUDFLARE_API_TOKEN",
       "PLANETSCALE_API_TOKEN",
       "PLANETSCALE_API_TOKEN_ID",
-      "AXIOM_TOKEN",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
       "OAUTH_PROXY_SECRET",
-      "CONTEXT_DEV_API_KEY",
     ] as const)
       yield* GitHub.Secret(name, { ...target, name, value: yield* Config.Redacted(name) }).pipe(
         retain(),
       );
+    for (const name of ["AXIOM_TOKEN", "CONTEXT_DEV_API_KEY"] as const) {
+      const configured = yield* Config.Redacted(name).pipe(
+        Config.option,
+        Effect.map(Option.filter((value) => Redacted.value(value) !== "")),
+      );
+      const value = Option.getOrElse(configured, () => Redacted.make(""));
+      const secret = GitHub.Secret(name, { ...target, name, value });
+      yield* secret;
+    }
     // GitHub reserves the GITHUB_ prefix in Actions secrets. Login clients are shared with
     // the existing OAuth proxy; previews still own their signing and encryption secrets.
     for (const name of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const)

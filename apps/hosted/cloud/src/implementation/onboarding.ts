@@ -95,6 +95,10 @@ export const makeOnboarding = Effect.fn("onboarding.service")(function* (options
       if (!(yield* store.claimCompany(domain, lease))) return null;
       const result = yield* lookup.lookup(domain).pipe(Effect.timeout("2 seconds"), Effect.result);
       if (Result.isSuccess(result)) {
+        if (result.success === undefined) {
+          yield* store.releaseCompany(domain, lease);
+          return null;
+        }
         yield* store.saveCompany(domain, lease, result.success);
         return result.success;
       }

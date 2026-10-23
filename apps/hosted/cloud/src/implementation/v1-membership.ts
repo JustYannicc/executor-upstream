@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg";
-import { Effect, Layer, type Redacted, Schema } from "effect";
+import { Effect, Layer, Option, type Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { AutumnClient, type AutumnOptions } from "../contracts/autumn.ts";
 import { V1Membership, V1MembershipUnavailable } from "../contracts/onboarding.ts";
@@ -24,8 +24,8 @@ export interface V1MembershipSettings {
   readonly since: Date;
   /** v1's Postgres, read through a role that can only select the tables below. */
   readonly database: Redacted.Redacted<string>;
-  /** The Autumn account that bills v1, where each customer id is a WorkOS organization id. */
-  readonly billing: AutumnOptions;
+  /** The Autumn account that bills v1, when configured. */
+  readonly billing?: AutumnOptions;
 }
 
 /** Self-host, local Cloud and test stages without v1's key admit every account. */
@@ -57,10 +57,15 @@ export const v1MembershipLive = (settings: V1MembershipSettings) =>
         ),
         HttpClient.filterStatusOk,
       );
-      const autumn = AutumnClient.pipe(
-        Effect.provide(autumnLive(settings.billing, autumnReads.once)),
-        Effect.provideService(HttpClient.HttpClient, yield* HttpClient.HttpClient),
-      );
+      const autumn =
+        settings.billing === undefined
+          ? Option.none()
+          : Option.some(
+              AutumnClient.pipe(
+                Effect.provide(autumnLive(settings.billing, autumnReads.once)),
+                Effect.provideService(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+              ),
+            );
       const list = <S extends Schema.Top>(
         path: string,
         params: Record<string, string>,
@@ -119,17 +124,19 @@ export const v1MembershipLive = (settings: V1MembershipSettings) =>
         );
       /** Whether Autumn bills this organization on a paid v1 plan. No customer means free. */
       const paid = (id: string) =>
-        autumn.pipe(
-          Effect.flatMap((billing) => billing.getCustomer({ customerId: id })),
-          Effect.map(
-            (customer) =>
-              customer !== null &&
-              customer.subscriptions.some(
-                (subscription) =>
-                  !freePlans.includes(subscription.planId) && subscription.status !== "expired",
+        Option.isNone(autumn)
+          ? Effect.succeed(false)
+          : autumn.value.pipe(
+              Effect.flatMap((billing) => billing.getCustomer({ customerId: id })),
+              Effect.map(
+                (customer) =>
+                  customer !== null &&
+                  customer.subscriptions.some(
+                    (subscription) =>
+                      !freePlans.includes(subscription.planId) && subscription.status !== "expired",
+                  ),
               ),
-          ),
-        );
+            );
       const onV1 = (email: string) =>
         Effect.gen(function* () {
           const ids = yield* organizations(email);

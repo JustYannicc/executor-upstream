@@ -2,7 +2,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
-import * as Axiom from "alchemy/Axiom";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Neon from "alchemy/Neon";
 import { Effect, Layer, Schema } from "effect";
@@ -14,6 +13,7 @@ import {
   TestStageBucketCleanup,
   TestStageDomainCleanup,
 } from "./src/infrastructure/test-stage-cleanup-providers.ts";
+import { axiomProviders } from "./src/infrastructure/axiom-provider.ts";
 
 const cleanupState = Layer.unwrap(
   Effect.gen(function* () {
@@ -32,7 +32,7 @@ export default Alchemy.Stack(
       Command.providers(),
       TestStageBuildCleanup(),
       TestStageBucketCleanup(),
-      Axiom.providers(),
+      axiomProviders,
       Planetscale.providers(),
       Neon.providers(),
       TestStageDomainCleanup().pipe(Layer.provide(cleanupState)),

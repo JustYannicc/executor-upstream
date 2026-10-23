@@ -2,7 +2,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
-import * as Axiom from "alchemy/Axiom";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Neon from "alchemy/Neon";
 import * as Docker from "alchemy/Docker";
@@ -43,6 +42,7 @@ import { cloudOrigin, productionStage, stageName } from "./src/infrastructure/st
 import { AppCatalog } from "./src/infrastructure/app-catalog.ts";
 import { productionOAuthProxyCheck } from "./src/infrastructure/deploy-settings.ts";
 import { testStageEdge, testStageRoleHostRecords } from "./src/infrastructure/role-hosts.ts";
+import { axiomProviders } from "./src/infrastructure/axiom-provider.ts";
 
 /** Every Worker the stack deploys. `scripts/worker-sizes.ts` builds the same layers. */
 export const cloudWorkers = Layer.mergeAll(
@@ -74,7 +74,7 @@ export default Alchemy.Stack(
           Effect.map(({ dev }) =>
             dev
               ? Layer.empty
-              : Layer.mergeAll(Planetscale.providers(), Neon.providers(), Axiom.providers()),
+              : Layer.mergeAll(Planetscale.providers(), Neon.providers(), axiomProviders),
           ),
         ),
       ),
