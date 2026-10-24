@@ -2446,6 +2446,7 @@ layer(HostedLive, { excludeTestServices: true })("Credential placement", (it) =>
         );
         expect(renewalResponse.status, "managed account renewal failed").toBe(200);
         const renewed = yield* body(Called, renewalResponse);
+        expect(renewed.status).toBe(200);
         expect(metrics.refreshesIssued).toBeGreaterThan(refreshed);
         expect(metrics.refreshChecks).toMatchObject({
           issued: true,
