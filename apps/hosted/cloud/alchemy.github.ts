@@ -10,6 +10,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import { retain } from "alchemy/RemovalPolicy";
 import { Config, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { firstPartyOAuthClientDefinitions } from "@executor-js/hosted-server";
 import { stackState } from "./src/infrastructure/state.ts";
 import { productionSocialCallbackOrigin } from "./src/infrastructure/deploy-settings.ts";
 import { BrowserOrigin, browserOriginSetting } from "./src/infrastructure/stage.ts";
@@ -476,6 +477,11 @@ export default Alchemy.Stack(
         "github",
         ...(Option.isSome(googleId) ? ["google"] : []),
         ...(Option.isSome(slackId) ? ["slack"] : []),
+        ...(Option.isSome(zohoId)
+          ? firstPartyOAuthClientDefinitions
+              .filter(({ id }) => id.startsWith("zoho-"))
+              .map(({ id }) => id)
+          : []),
       ];
       const missing = offered.find((client) => !Object.hasOwn(v1ClientIds, client));
       if (missing !== undefined)
