@@ -40,9 +40,11 @@ import {
   firstPartyGitHubSettings,
   firstPartyGoogleSettings,
   firstPartySlackSettings,
+  firstPartyZohoSettings,
   missingFirstPartyGitHubClient,
   partialFirstPartyGoogleClient,
   partialFirstPartySlackClient,
+  partialFirstPartyZohoClient,
 } from "./src/infrastructure/first-party-oauth-settings.ts";
 
 /**
@@ -404,8 +406,8 @@ export default Alchemy.Stack(
     /**
      * The operator's OAuth clients' credentials (`first-party-oauth-settings.ts`). Production
      * offers v1's Executor.sh GitHub App, so this stack refuses to apply without its client ID and
-     * secret and says which Agents vault item to reference. Executor for Google and Executor for
-     * Slack are each turned on once both of their values are set; one without the other is refused.
+     * secret and says which Agents vault item to reference. Google, Slack and Zoho are offered
+     * only when both values are set; one without the other is refused.
      */
     const credentials = (names: { readonly clientId: string; readonly clientSecret: string }) =>
       Effect.all([nonEmptySecret(names.clientId), nonEmptySecret(names.clientSecret)]);
@@ -418,6 +420,9 @@ export default Alchemy.Stack(
     const [slackId, slackSecret] = yield* credentials(firstPartySlackSettings);
     if (Option.isSome(slackId) !== Option.isSome(slackSecret))
       return yield* Effect.die(new Error(partialFirstPartySlackClient));
+    const [zohoId, zohoSecret] = yield* credentials(firstPartyZohoSettings);
+    if (Option.isSome(zohoId) !== Option.isSome(zohoSecret))
+      return yield* Effect.die(new Error(partialFirstPartyZohoClient));
     const firstPartySecrets = [
       [firstPartyGitHubSettings.clientId, githubId.value],
       [firstPartyGitHubSettings.clientSecret, githubSecret.value],
@@ -431,6 +436,12 @@ export default Alchemy.Stack(
         ? ([
             [firstPartySlackSettings.clientId, slackId.value],
             [firstPartySlackSettings.clientSecret, slackSecret.value],
+          ] as const)
+        : []),
+      ...(Option.isSome(zohoId) && Option.isSome(zohoSecret)
+        ? ([
+            [firstPartyZohoSettings.clientId, zohoId.value],
+            [firstPartyZohoSettings.clientSecret, zohoSecret.value],
           ] as const)
         : []),
     ] as const;
