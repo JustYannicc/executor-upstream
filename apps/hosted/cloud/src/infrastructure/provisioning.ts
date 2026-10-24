@@ -25,6 +25,7 @@ import { cloudAnalytics } from "../implementation/product-analytics.ts";
 import { cloudBackgroundJobs } from "./background-jobs.ts";
 import {
   encryptedWorkflowParams,
+  workflowEncryptionEnabled,
   encryptedWorkflowResult,
   encryptedWorkflowTask,
   workflowEncryptionKey,
@@ -210,6 +211,7 @@ export const dispatchProvisioning = <R>(
 ) =>
   Effect.gen(function* () {
     const environment = yield* Cloudflare.WorkerEnvironment;
+    const encrypted = yield* workflowEncryptionEnabled;
     const binding = yield* Schema.decodeUnknownEffect(NativeProvisioning)(environment.Provisioning);
     const sql = yield* Effect.flatten(GroupDatabase);
     const jobs =
@@ -234,7 +236,7 @@ export const dispatchProvisioning = <R>(
               try {
                 await binding.create({
                   id: job.id,
-                  params: encryptedWorkflowParams({ id: job.id }),
+                  params: encryptedWorkflowParams({ id: job.id }, encrypted),
                 });
                 return "running" as const;
               } catch {

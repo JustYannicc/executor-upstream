@@ -48,6 +48,7 @@ import { AppBuilds } from "./blobs.ts";
 import type { V1ImportSettings } from "./onboarding.ts";
 import {
   encryptedWorkflowParams,
+  workflowEncryptionEnabled,
   encryptedWorkflowResult,
   encryptedWorkflowTask,
   type WorkflowResults,
@@ -340,6 +341,7 @@ const aggregationId = /^[0-9a-f]{32}$/u;
 export const v1ImportRoutes = (workflow: Workflow) =>
   Effect.gen(function* () {
     const configuration = yield* V1ImportConfiguration;
+    const encrypted = yield* workflowEncryptionEnabled;
     const authorized = Effect.gen(function* () {
       if (Option.isNone(configuration)) return Option.none();
       const token = configuration.value.settings.operatorToken;
@@ -365,7 +367,7 @@ export const v1ImportRoutes = (workflow: Workflow) =>
       return workflow
         .create({
           id: instance,
-          params: encryptedWorkflowParams(params),
+          params: encryptedWorkflowParams(params, encrypted),
         })
         .pipe(
           Effect.timeout(callDeadline),
