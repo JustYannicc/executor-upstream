@@ -192,6 +192,8 @@ export const oauthSetupIssuer = Effect.gen(function* () {
   const refreshOrigins = new Map<string, "sign-in" | "refresh">();
   /** The issuance of each refresh token revocation named, in order: a current or replaced one. */
   const revokedRefreshTokens: Array<"sign-in" | "refresh"> = [];
+  const revokedRefreshTokenClients: Array<{ issuedTo: string | null; presentedBy: string | null }> =
+    [];
   /** Refresh tokens a rotation replaced, with their client. */
   const replacedRefreshGrants = new Map<string, string>();
   const refreshedAccessTokens = new Set<string>();
@@ -826,10 +828,19 @@ export const oauthSetupIssuer = Effect.gen(function* () {
           typeof presented.clientId === "string" ? clients.get(presented.clientId) : undefined;
         const token = input.get("token");
         const origin = token === null ? undefined : refreshOrigins.get(token);
-        if (origin !== undefined) revokedRefreshTokens.push(origin);
+        if (origin !== undefined) {
+          revokedRefreshTokens.push(origin);
+          revokedRefreshTokenClients.push({
+            issuedTo:
+              token === null
+                ? null
+                : (refreshGrants.get(token) ?? replacedRefreshGrants.get(token) ?? null),
+            presentedBy: presented.clientId ?? null,
+          });
+        }
         revocations.push({
           token:
-            token !== null && refreshGrants.has(token)
+            token !== null && refreshOrigins.has(token)
               ? "refresh"
               : token === "synthetic-access-token" ||
                   (token !== null && refreshedAccessTokens.has(token))
@@ -1191,6 +1202,7 @@ export const oauthSetupIssuer = Effect.gen(function* () {
       nonceRequested,
       revocations: [...revocations],
       revokedRefreshTokens: [...revokedRefreshTokens],
+      revokedRefreshTokenClients: [...revokedRefreshTokenClients],
       resourceRequests: { ...resourceRequests },
       resourceAuthorizations: [...resourceAuthorizations],
     })),

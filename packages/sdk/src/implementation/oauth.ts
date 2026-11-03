@@ -695,23 +695,6 @@ export const makeOAuth = (
     });
 
   /**
-   * Renew an authorization code grant with its refresh token. Undefined when it has none, or when
-   * the operator removed the client that issued it.
-   */
-  const refreshOf = (
-    protocol: ReturnType<typeof makeOAuthProtocol>,
-    grant: Exclude<OAuthGrant, { readonly grant: "client_credentials" }>,
-  ) =>
-    Effect.gen(function* () {
-      const operating = yield* operatingGrant(grant);
-      return grant.refreshToken === undefined ||
-        operating === undefined ||
-        operating.grant === "client_credentials"
-        ? undefined
-        : protocol.refresh({ ...operating, refreshToken: grant.refreshToken });
-    });
-
-  /**
    * The operator's client to sign in with, and the scopes to ask for, when one is configured for
    * exactly the method's authorization and token endpoints. The endpoints decide only whether it
    * is offered: an issuer, which a provider can claim, never does, and signing in uses the
@@ -2412,10 +2395,14 @@ export const makeOAuth = (
           return held(grant.fields);
         if (protocol === undefined) return yield* reconnect("not_renewable");
         const stage = grant.grant === "client_credentials" ? "clientCredentials" : "refresh";
+        const issuing = yield* operatingGrant(grant);
+        if (issuing === undefined) return yield* reconnect("not_renewable");
         const renewal =
-          grant.grant === "client_credentials"
-            ? protocol.clientCredentials(grant)
-            : yield* refreshOf(protocol, grant);
+          issuing.grant === "client_credentials"
+            ? protocol.clientCredentials(issuing)
+            : issuing.refreshToken === undefined
+              ? undefined
+              : protocol.refresh({ ...issuing, refreshToken: issuing.refreshToken });
         if (renewal === undefined) return yield* reconnect("not_renewable");
         const claim = `refresh_${yield* nextId}`;
         /**
@@ -2607,6 +2594,34 @@ export const makeOAuth = (
           );
           if (!committed) {
             recorded.lost = "tokens";
+            // Only this response is discarded. A replacement grant belongs to another writer.
+            yield* revokeLater(
+              Effect.forEach(
+                [
+                  {
+                    refreshToken:
+                      grant.grant !== "client_credentials" &&
+                      tokens.refresh_token === grant.refreshToken
+                        ? undefined
+                        : tokens.refresh_token,
+                    accessToken: undefined,
+                  },
+                  {
+                    refreshToken: undefined,
+                    accessToken:
+                      tokens.access_token === grant.fields.access_token
+                        ? undefined
+                        : tokens.access_token,
+                  },
+                ],
+                (discarded) =>
+                  settledRevocation(revokeTokens(issuing, discarded), "oauth.revokeRefused", {
+                    account: account.id,
+                    provider: account.provider,
+                  }),
+                { discard: true },
+              ),
+            );
             return undefined;
           }
           yield* Effect.annotateCurrentSpan("oauth.renewal.outcome", "renewed");
@@ -3064,11 +3079,27 @@ export const makeOAuth = (
   const settledRevocation = <R>(
     revocation: Effect.Effect<string, unknown, R>,
     span: "oauth.revokeGrant" | "oauth.revokeRefused",
+    identity?: { readonly account: AccountId; readonly provider: string },
   ) =>
     revocation.pipe(
       Effect.catch(() => Effect.succeed("failed")),
       Effect.catchDefect(() => Effect.succeed("failed")),
       Effect.tap((outcome) => Effect.annotateCurrentSpan("oauth.revocation.outcome", outcome)),
+      Effect.tap((outcome) =>
+        outcome === "failed"
+          ? Effect.logWarning("OAuth token revocation failed").pipe(
+              Effect.annotateLogs({
+                "oauth.revocation.outcome": outcome,
+                ...(identity === undefined
+                  ? {}
+                  : {
+                      "executor.account.id": identity.account,
+                      "oauth.provider.id": identity.provider,
+                    }),
+              }),
+            )
+          : Effect.void,
+      ),
       Effect.asVoid,
       Effect.withSpan(span),
     );
@@ -3105,6 +3136,7 @@ export const makeOAuth = (
         });
       }),
       "oauth.revokeGrant",
+      removed,
     );
   /** Revoke after the deletion commits; see `revokeLater`. */
   const revokeRemoved = (removed: Parameters<typeof revokeGrant>[0]) =>

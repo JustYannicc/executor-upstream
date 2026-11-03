@@ -4960,6 +4960,26 @@ export const scenarios = plan({
       local: na("Hosted callback page and account dialogs."),
     },
   },
+  oauthDiscardedRefresh: {
+    fixtures: "actors",
+    file: "oauth-discarded-refresh.spec.ts",
+    title: "Cloud discards a rotated refresh safely after account deletion wins settlement",
+    targets: {
+      cloud: managedCloud,
+      "self-host": na("The proof observes the managed Cloud's native SQL and background work."),
+      local: na("The proof observes the managed Cloud's native SQL and background work."),
+    },
+  },
+  oauthDiscardedRefreshReconnect: {
+    fixtures: "actors",
+    file: "oauth-discarded-refresh.spec.ts",
+    title: "Cloud discards a rotated refresh without revoking reconnected credentials",
+    targets: {
+      cloud: managedCloud,
+      "self-host": na("The proof observes the managed Cloud's native SQL and background work."),
+      local: na("The proof observes the managed Cloud's native SQL and background work."),
+    },
+  },
   oauthClientAuthentication: {
     fixtures: "actors",
     file: "oauth-client-authentication.spec.ts",

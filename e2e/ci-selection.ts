@@ -287,6 +287,16 @@ const notRunInCi: Partial<
     { readonly targets: ReadonlyArray<typeof Target.Type>; readonly reason: string }
   >
 > = {
+  oauthDiscardedRefresh: {
+    targets: ["cloud"],
+    reason:
+      "Needs disposable SQL gates. Run node e2e/proofs/oauth-discard/prove.ts against managed Cloud.",
+  },
+  oauthDiscardedRefreshReconnect: {
+    targets: ["cloud"],
+    reason:
+      "Needs disposable SQL gates. Run node e2e/proofs/oauth-discard/prove.ts against managed Cloud.",
+  },
   mcp: {
     targets: ["self-host", "cloud"],
     reason: "Needs a model API key, which CI does not hold.",
