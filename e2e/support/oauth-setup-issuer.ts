@@ -48,6 +48,7 @@ export const IssuerPort = Context.Reference<number>("e2e/IssuerPort", { defaultV
 export const oauthSetupIssuer = Effect.gen(function* () {
   const port = yield* IssuerPort;
   const address = yield* Deferred.make<string>();
+  const revocationReceived = yield* Deferred.make<void>();
   let registration = true;
   let postChallenge = false;
   let challenge = true;
@@ -842,6 +843,7 @@ export const oauthSetupIssuer = Effect.gen(function* () {
             client.secret !== null &&
             presented.secret === client.secret,
         });
+        yield* Deferred.succeed(revocationReceived, undefined);
         return revocation === "failing"
           ? HttpServerResponse.empty({ status: 503 })
           : HttpServerResponse.empty({ status: 200 });
@@ -962,6 +964,7 @@ export const oauthSetupIssuer = Effect.gen(function* () {
   yield* Deferred.succeed(address, origin);
   return {
     origin,
+    revoked: Deferred.await(revocationReceived),
     configure: (input: {
       readonly requireUserAgent?: boolean;
       readonly registration?: boolean;

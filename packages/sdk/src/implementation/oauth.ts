@@ -2561,6 +2561,13 @@ export const makeOAuth = (
           const ready = `ready_${yield* nextId}`;
           const committed = yield* transaction(db, (tx) =>
             Effect.gen(function* () {
+              // Removal claims the account before its grant. Renewal must take the same order.
+              yield* query(() =>
+                tx.updateMany("accounts", {
+                  where: (b) => b("id", "=", account.id),
+                  set: { createdAt: account.createdAt },
+                }),
+              );
               const saved = yield* query(() =>
                 tx.findFirst("accounts", { where: (b) => b("id", "=", account.id) }),
               );

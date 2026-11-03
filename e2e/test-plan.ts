@@ -4960,6 +4960,16 @@ export const scenarios = plan({
       local: na("Hosted callback page and account dialogs."),
     },
   },
+  oauthAccountRemoval: {
+    fixtures: "actors",
+    file: "oauth-account-removal.spec.ts",
+    title: "Cloud account removal survives concurrent webhook declaration OAuth renewal",
+    targets: {
+      cloud: managedCloud,
+      "self-host": na("The proof gates the managed Cloud's actual Postgres transactions."),
+      local: na("The proof gates the managed Cloud's actual Postgres transactions."),
+    },
+  },
   oauthClientAuthentication: {
     fixtures: "actors",
     file: "oauth-client-authentication.spec.ts",
