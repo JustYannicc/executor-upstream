@@ -14,11 +14,12 @@ import { appsManifest } from "./apps-release.ts";
  * Omit staleFor to use the framework default stale-while-revalidate window. With `retiring`, the
  * first document also has `/legacy`, which a published document drops and whose route then answers
  * 404, and every document has `/missing`, whose item never exists: it answers 404 with a body that
- * repeats the request's credential, which no failure may show.
+ * repeats the request's credential, which no failure may show. `patches` are the app's static
+ * document patches.
  */
 export const liveOpenapiFixture = (
   freshFor: number,
-  options: { staleFor?: number; retiring?: boolean } = {},
+  options: { staleFor?: number; retiring?: boolean; patches?: readonly unknown[] } = {},
 ) =>
   Effect.gen(function* () {
     let version = 1;
@@ -170,7 +171,7 @@ export const liveOpenapiFixture = (
 export default defineApp({}, async ctx => ({ tools: liveOpenapiRouter({cache:ctx.cache, fetch:ctx.fetch, signal:ctx.signal,
  source:{url:${JSON.stringify(origin + "/openapi.json")}}, allowedOrigin:${JSON.stringify(origin)}, freshFor:${freshFor},${options.staleFor === undefined ? "" : ` staleFor:${options.staleFor},`}
  securitySchemes:{token:{type:'apiKey',in:'header',name:'x-token'}}, methods:{apiKey:[{scheme:'token',field:'token',part:'value',prefix:''}]}, oauth:[],
- account:{method:'apiKey',fields:{token:'synthetic-live-key'}}
+ account:{method:'apiKey',fields:{token:'synthetic-live-key'}},${options.patches === undefined ? "" : ` patches:${JSON.stringify(options.patches)},`}
 }) }));`,
       },
       appsManifest,

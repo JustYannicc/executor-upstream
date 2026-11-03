@@ -292,7 +292,11 @@ settings the definition cannot be trusted to decide:
   Pointer through objects only: every segment before the last must name an
   existing object, so a pointer cannot index into an array. Replace the whole
   array at its key instead. `add` creates or overwrites a key; `remove` and
-  `replace` need it to exist.
+  `replace` need it to exist. When the definition no longer has the path item
+  or operation a patch is under, in `paths`, `webhooks` or
+  `components.pathItems`, the patch is skipped and logged, so an API that drops
+  an operation leaves the other tools working. Any other missing target, such
+  as a field of an operation that still exists, fails the definition.
 - Optional `pathPrefix`, such as `/projects/{project}`, when the definition's
   paths omit leading segments. It goes between the server and every path; each
   `{name}` becomes a required path parameter of every tool.

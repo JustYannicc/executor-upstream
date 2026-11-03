@@ -968,6 +968,17 @@ export const scenarios = plan({
       local: na("Hosted version API scenario"),
     },
   },
+  liveOpenapiStalePatches: {
+    fixtures: "actors",
+    file: "live-openapi.spec.ts",
+    title:
+      "Live OpenAPI skips app patches whose target the document no longer has and still rejects malformed ones",
+    targets: {
+      "self-host": scheduled,
+      cloud: na("Loopback upstream fixture"),
+      local: na("Hosted version API scenario"),
+    },
+  },
   liveOpenapiRetired: {
     fixtures: "actors",
     file: "live-openapi.spec.ts",

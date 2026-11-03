@@ -61,6 +61,48 @@ layer(HostedLive, { excludeTestServices: true })("Live OpenAPI", (it) => {
       }),
     ),
   );
+  it.effect(scenarios.liveOpenapiStalePatches.title, (context) =>
+    withHostedCase(
+      context,
+      Effect.gen(function* () {
+        // The API dropped the path item or operation three patches were written for; the fourth
+        // still applies.
+        const fixture = yield* liveOpenapiFixture(0, {
+          staleFor: 0,
+          patches: [
+            { op: "replace", path: "/paths/~1speech~1{voice_id}/post/parameters", value: [] },
+            { op: "remove", path: "/paths/~1echo/delete" },
+            { op: "add", path: "/paths/~1echo/post/security", value: [] },
+            { op: "replace", path: "/paths/~1echo/get/operationId", value: "echoes_patched" },
+          ],
+        });
+        const called = yield* fixture.call("patched", "old");
+        expect(called.status, JSON.stringify(called.body)).toBe(200);
+        expect(yield* body(Schema.Json, called)).toEqual({
+          token: "synthetic-live-key",
+          stolen: null,
+        });
+        const tools = yield* fixture.api.request(
+          fixture.actors.owner,
+          "GET",
+          `${fixture.path}/tools`,
+        );
+        expect(tools.status).toBe(200);
+        expect((yield* body(Listing, tools)).items.map((tool) => tool.name)).toEqual([
+          "echoes.patched",
+        ]);
+
+        // A patch the app wrote wrong still fails its tools instead of being skipped.
+        const malformed = yield* liveOpenapiFixture(0, {
+          staleFor: 0,
+          patches: [{ op: "replace", path: "/paths/~1echo/get/operationId" }],
+        });
+        const refused = yield* malformed.call("old", "old");
+        expect(refused.status, JSON.stringify(refused.body)).toBe(502);
+        expect(JSON.stringify(refused.body)).toContain("invalid_definition");
+      }),
+    ),
+  );
   it.effect(scenarios.liveOpenapiRetired.title, (context) =>
     withHostedCase(
       context,

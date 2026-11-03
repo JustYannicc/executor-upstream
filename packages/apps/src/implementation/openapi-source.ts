@@ -346,40 +346,89 @@ export interface OpenapiSourceOptions extends Omit<
   }[];
 }
 
-/** JSON-object patches are static app configuration and are reapplied to every revision. */
+/** One static patch an OpenAPI source applies to every revision of its definition. */
+export type OpenapiPatch = NonNullable<OpenapiSourceOptions["patches"]>[number];
+
+// Where a definition keeps path items. The item's key and its method follow these segments.
+const pathItemContainers = [["paths"], ["webhooks"], ["x-webhooks"], ["components", "pathItems"]];
+
+// The path item fields that hold an operation in any OpenAPI version, whether or not the importer
+// supports its method; the item's other fields, such as `parameters`, do not.
+const operationKeys = new Set([
+  "get",
+  "put",
+  "post",
+  "delete",
+  "options",
+  "head",
+  "patch",
+  "trace",
+  "query",
+]);
+
+/** Pointer positions where a missing key means the provider dropped a path item or operation. */
+const droppedAt = (path: readonly string[]) => {
+  const container = pathItemContainers.find((prefix) =>
+    prefix.every((part, index) => path[index] === part),
+  );
+  if (container === undefined) return [];
+  const item = container.length;
+  const key = path[item + 1];
+  // OpenAPI 3.2 keeps other methods' operations under `additionalOperations`; the patch must name
+  // one of them for its absence to mean a dropped operation.
+  if (key === "additionalOperations")
+    return path.length > item + 2 ? [item, item + 1, item + 2] : [item];
+  return key !== undefined && operationKeys.has(key) ? [item, item + 1] : [item];
+};
+
+/**
+ * JSON-object patches are static app configuration and are reapplied to every revision. A live
+ * definition can drop a path item or operation a patch was written for; that patch has nothing
+ * left to change, so it is passed to `stale` and skipped instead of failing every tool. Any other
+ * missing target fails, such as a field of an operation that still exists or a security scheme,
+ * so such a patch is never silently lost. So does a malformed patch, or one that walks into a
+ * value that is not an object.
+ */
 export function patchOpenapi(
   root: JsonObject,
   patches: OpenapiSourceOptions["patches"],
+  stale: (patch: OpenapiPatch) => void,
 ): JsonObject {
   let result = root;
   for (const patch of patches ?? []) {
-    if (!patch.path.startsWith("/")) throw invalid();
+    // A patch is checked whole before its target is looked up, so a malformed one is never skipped.
+    if (!["add", "remove", "replace"].includes(patch.op)) throw invalid();
+    if (!patch.path.startsWith("/") || /~(?![01])/.test(patch.path)) throw invalid();
     const path = patch.path
       .slice(1)
       .split("/")
       .map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
     if (path.some((part) => ["__proto__", "constructor", "prototype"].includes(part)))
       throw invalid();
-    const update = (node: JsonObject, parts: readonly string[]): JsonObject => {
-      const [head, ...rest] = parts;
-      if (head === undefined) throw invalid();
-      if (rest.length)
-        return {
-          ...node,
-          [head]: update(
-            Schema.decodeUnknownSync(JsonObject)(
-              Object.hasOwn(node, head) ? node[head] : undefined,
-            ),
-            rest,
-          ),
-        };
-      if (patch.op !== "add" && !Object.hasOwn(node, head)) throw invalid();
+    const value = patch.value;
+    if (patch.op !== "remove" && value === undefined) throw invalid();
+    const dropped = droppedAt(path);
+    // Undefined when the definition dropped the path item or operation holding the target.
+    const missing = (at: number) => {
+      if (dropped.includes(at)) return undefined;
+      throw invalid();
+    };
+    const update = (node: JsonObject, at: number): JsonObject | undefined => {
+      const head = path[at]!;
+      if (at < path.length - 1) {
+        if (!Object.hasOwn(node, head)) return missing(at);
+        const child = update(Schema.decodeUnknownSync(JsonObject)(node[head]), at + 1);
+        return child === undefined ? undefined : { ...node, [head]: child };
+      }
+      if (patch.op !== "add" && !Object.hasOwn(node, head)) return missing(at);
       if (patch.op === "remove")
         return Object.fromEntries(Object.entries(node).filter(([name]) => name !== head));
-      if (patch.value === undefined) throw invalid();
-      return { ...node, [head]: patch.value };
+      if (value === undefined) throw invalid();
+      return { ...node, [head]: value };
     };
-    result = update(result, path);
+    const patched = update(result, 0);
+    if (patched === undefined) stale(patch);
+    else result = patched;
   }
   return result;
 }
@@ -488,13 +537,20 @@ const sourceDocument = (
   context: Parameters<typeof download>[1],
 ) =>
   Effect.gen(function* () {
-    return patchOpenapi(
+    const stale: string[] = [];
+    const document = patchOpenapi(
       "url" in options.source
         ? yield* download(options.source.url, context)
         : // A copy the compilation can own, as a tree.
           Schema.decodeUnknownSync(JsonObject)(JSON.parse(JSON.stringify(options.source.document))),
       options.patches,
+      (patch) => stale.push(`${patch.op} ${patch.path}`),
     );
+    if (stale.length > 0)
+      yield* Effect.logWarning(
+        "OpenAPI patches skipped: the document no longer has their targets",
+      ).pipe(Effect.annotateLogs({ patches: stale }));
+    return document;
   });
 
 /** Compile a definition with the source's static settings. */
